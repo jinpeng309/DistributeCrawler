@@ -40,10 +40,16 @@ class Worker(implicit materializer: ActorMaterializer) extends Actor with ActorL
             }
     }
 
+    def processUserProfileResponse(username: String, url: String, body: String): Unit = {
+        for (profile <- UserProfileExtractor(username, url, body).extract()) {
+            println(profile.hash)
+        }
+    }
+
     def processResponse(url: String, body: String): Unit = {
         url match {
             case Worker.profileUrlPattern(username) =>
-                println(username)
+                processUserProfileResponse(username, url, body)
         }
     }
 

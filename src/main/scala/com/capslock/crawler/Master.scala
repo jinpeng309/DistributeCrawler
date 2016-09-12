@@ -13,7 +13,7 @@ class Master(topic: String)(implicit materializer: Materializer) extends Actor w
     val cluster = Cluster(context.system)
 
     var router = {
-        val routees = Vector.fill(Runtime.getRuntime.availableProcessors()) {
+        val routees = Vector.fill(Runtime.getRuntime.availableProcessors() * 4 + 1) {
             val r = context.actorOf(Worker.props(materializer))
             context watch r
             ActorRefRoutee(r)
@@ -31,7 +31,6 @@ class Master(topic: String)(implicit materializer: Materializer) extends Actor w
                 context.actorSelection(RootActorPath(member.address) / "user" / CrawlerScheduler.name(topic)) ! MasterRegistration
             }
         case task: Task =>
-            println("rcv task " + task)
             router.route(task, sender())
         case Terminated(a) =>
             router.removeRoutee(a)
