@@ -43,6 +43,14 @@ class Worker(master: ActorRef)(implicit materializer: ActorMaterializer) extends
 
     def processUserProfileResponse(username: String, url: String, body: String, headers: immutable.Seq[HttpHeader]): Unit = {
         for (profile <- UserProfileExtractor(username, url, body).extract()) {
+            val a_t = headers.find(header => header.name().equals("Set-Cookie") && header.value().startsWith("a_t"))
+                .map(header => header.value()).map(cookie => {
+                cookie.substring(4, cookie.indexOf("; "))
+            })
+            val z_c0 = headers.find(header => header.name().equals("Set-Cookie") && header.value().startsWith("z_c0"))
+                .map(header => header.value()).map(cookie => {
+                cookie.substring(5, cookie.indexOf("; "))
+            })
             println(profile.hash)
         }
     }
