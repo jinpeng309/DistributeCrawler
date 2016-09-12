@@ -28,10 +28,6 @@ class Worker(implicit materializer: ActorMaterializer) extends Actor with ActorL
         case Task(_, url) =>
             val taskSender = sender()
             val requestHeaders = immutable.Seq(Worker.cookie)
-            //            http.singleRequest(HttpRequest(uri = "https://www.zhihu.com/node/ProfileFolloweesListV2?meethod=next&params=%7B%22offset%22%3A60%2C%22order_by%22%3A%22created%22%2C%22hash_id%22%3A%220970f947b898ecc0ec035f9126dd4e08%22%7D", headers = headers)).map {
-            //                case t =>
-            //                    println(t)
-            //            }
             http.singleRequest(HttpRequest(uri = url, headers = requestHeaders)).map {
                 case HttpResponse(StatusCodes.OK, headers, entity, _) =>
                     entity
