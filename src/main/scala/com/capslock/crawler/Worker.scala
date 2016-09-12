@@ -12,7 +12,7 @@ import scala.concurrent.duration._
 /**
  * Created by capslock1874.
  */
-class Worker(implicit materializer: ActorMaterializer) extends Actor with ActorLogging {
+class Worker(master: ActorRef)(implicit materializer: ActorMaterializer) extends Actor with ActorLogging {
 
     import akka.pattern.pipe
     import context.dispatcher
@@ -65,7 +65,7 @@ object Worker {
     )
     val profileUrlPattern = "https://www.zhihu.com/people/(.*)".r
 
-    def props(implicit materializer: Materializer): Props = {
-        Props(classOf[Worker], materializer)
+    def props(master: ActorRef)(implicit materializer: Materializer): Props = {
+        Props(classOf[Worker], master, materializer)
     }
 }

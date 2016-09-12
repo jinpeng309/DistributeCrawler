@@ -4,6 +4,7 @@ import akka.actor._
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.MemberUp
 import akka.stream.Materializer
+import com.capslock.crawler.CrawlerScheduler.{HEAVY, LIGHT, Node}
 
 /**
  * Created by capslock1874.
@@ -14,12 +15,21 @@ object CrawlerScheduler {
         Props(classOf[CrawlerScheduler], topic, initUrl, materializer)
 
     def name(topic: String) = s"crawler-$topic"
+
+    sealed trait LOAD
+
+    case object HEAVY extends LOAD
+
+    case object LIGHT extends LOAD
+
+    case class Node(actor: ActorRef, var load: LOAD)
+
 }
 
 class CrawlerScheduler(topic: String, initUrl: String)(implicit materializer: Materializer) extends Actor with ActorLogging {
     val cluster = Cluster(context.system)
     var tasks = List[Task](Task(topic, initUrl))
-    var nodes: List[ActorRef] = List()
+    var nodes: List[CrawlerScheduler.Node] = List()
 
     override def preStart(): Unit = cluster.subscribe(self, classOf[MemberUp])
 
@@ -31,21 +41,29 @@ class CrawlerScheduler(topic: String, initUrl: String)(implicit materializer: Ma
             dispatchTask(Task(topic, "https://www.zhihu.com/people/excited-vczh"))
         case MasterRegistration =>
             log.info(s"MasterRegister ${sender().path}")
-            println("MasterRegister")
             context watch sender()
-            nodes = sender() :: nodes
+            nodes = Node(sender(), LIGHT) :: nodes
             dispatchTasks()
         case Terminated(a) =>
-            nodes = nodes.filterNot(node => node.eq(a))
-            println(s"terminated current node $nodes")
+            nodes = nodes.filterNot(node => node.actor.eq(a))
+        case StopPushTaskFeedback =>
+            nodes.find(node => node.actor.eq(sender())).foreach(node => node.load = HEAVY)
+        case PullTask =>
+            dispatchTask(sender())
         case x =>
             println(x.toString)
     }
 
+    def dispatchTask(node: ActorRef): Unit = {
+        if (tasks.nonEmpty) {
+            node ! tasks.head
+            tasks = tasks.tail
+        }
+    }
+
     def dispatchTask(task: Task): Unit = {
         if (nodes.nonEmpty) {
-            println("send task")
-            nodes(Math.abs(task.hashCode() % nodes.size)) ! task
+            nodes.filterNot(node => node.load == HEAVY)(Math.abs(task.hashCode() % nodes.size)).actor ! task
         } else {
             tasks = task :: tasks
         }
