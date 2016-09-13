@@ -5,6 +5,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.Cookie
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer}
+import play.api.libs.json.Json
 
 import scala.collection.immutable
 import scala.concurrent.ExecutionContext
@@ -20,13 +21,13 @@ class Worker(master: ActorRef)(implicit materializer: ActorMaterializer) extends
 
     val http = Http(context.system)
 
-    case class TaskResponse(url: String, body: String, headers: immutable.Seq[HttpHeader], sender: ActorRef)
+    case class TaskResponse(topic: String, url: String, body: String, headers: immutable.Seq[HttpHeader], sender: ActorRef)
 
     override def receive: Receive = {
-        case TaskResponse(url, body, headers, taskSender) =>
-            processResponse(url, body, headers)
+        case TaskResponse(topic, url, body, headers, taskSender) =>
+            processResponse(topic, url, body, headers)
             taskSender ! TaskResult(Some("worker finish"))
-        case Task(_, request) =>
+        case Task(topic, request) =>
             val taskSender = sender()
             val requestHeaders = immutable.Seq(Worker.cookie)
             http.singleRequest(request).map {
@@ -34,15 +35,15 @@ class Worker(master: ActorRef)(implicit materializer: ActorMaterializer) extends
                     entity
                         .toStrict(10 seconds)
                         .map(_.data.decodeString("UTF-8"))
-                        .map(body => TaskResponse(request._2.path.toString(), body, headers, taskSender))
+                        .map(body => TaskResponse(topic, request._2.path.toString(), body, headers, taskSender))
                         .pipeTo(self)
                 case resp@HttpResponse(code, _, _, _) =>
                     resp.discardEntityBytes()
             }
     }
 
-    def processUserProfileResponse(username: String, url: String, body: String, headers: immutable.Seq[HttpHeader]): Unit = {
-        for (profile <- UserProfileExtractor(username, url, body).extract()) {
+    def processUserProfileResponse(topic: String, username: String, url: String, body: String, headers: immutable.Seq[HttpHeader]): List[Task] = {
+        for (userProfile <- UserProfileExtractor(username, url, body).extract()) {
             val a_t = headers.find(header => header.name().equals("Set-Cookie") && header.value().startsWith("a_t"))
                 .map(header => header.value()).map(cookie => {
                 cookie.substring(4, cookie.indexOf("; "))
@@ -51,14 +52,33 @@ class Worker(master: ActorRef)(implicit materializer: ActorMaterializer) extends
                 .map(header => header.value()).map(cookie => {
                 cookie.substring(5, cookie.indexOf("; "))
             })
-            println(profile.hash)
+            for (aTCookie <- a_t; zC0Cookie <- z_c0) {
+                val cookie = Cookie(
+                    ("a_t", aTCookie),
+                    ("z_c0", zC0Cookie)
+                )
+                val requestHeaders = immutable.Seq(cookie)
+                val offset = 0
+                val hash = userProfile.hash
+                val params = Json.obj(
+                    "method" -> "next",
+                    "params" -> Json.obj(
+                        "offset" -> offset,
+                        "order_by" -> "created",
+                        "hash_id" -> hash
+                    ))
+                val formData = FormData(("method", "next"), ("params", params.toString())).toEntity
+                val httpRequest = HttpRequest(HttpMethods.GET, Worker.profileFolloweesList, headers = requestHeaders, entity = formData)
+                List(Task(topic, httpRequest))
+            }
         }
+        List()
     }
 
-    def processResponse(url: String, body: String, headers: immutable.Seq[HttpHeader]): Unit = {
+    def processResponse(topic: String, url: String, body: String, headers: immutable.Seq[HttpHeader]): Unit = {
         url match {
             case Worker.profileUrlPattern(username) =>
-                processUserProfileResponse(username, url, body, headers)
+                processUserProfileResponse(topic, username, url, body, headers)
             case `url` if url.startsWith(Worker.profileFolloweesList) =>
 
         }
@@ -89,11 +109,23 @@ object Worker {
         import ExecutionContext.Implicits.global
         val http = Http(system)
         val requestHeaders = immutable.Seq(Worker.cookie)
-        val offset = 0
+        val offset = 20
         val hash = "0970f947b898ecc0ec035f9126dd4e08"
-        val formData = FormData(("method", "next"), ("params", "{\"offset\":20,\"order_by\":\"created\",\"hash_id\":\"0970f947b898ecc0ec035f9126dd4e08\"}")).toEntity
+        val params = Json.obj(
+            "offset" -> offset,
+            "order_by" -> "created",
+            "hash_id" -> hash
+        )
+        val formData = FormData(("method", "next"), ("params", params.toString())).toEntity
         val httpRequest = HttpRequest(HttpMethods.GET, "https://www.zhihu.com/node/ProfileFolloweesListV2", headers = requestHeaders, entity = formData)
-        http.singleRequest(httpRequest)
-            .foreach(response => println(response.headers.foreach(httpHeader => println(httpHeader))))
+        http.singleRequest(httpRequest).map {
+            case HttpResponse(StatusCodes.OK, headers, entity, _) =>
+                entity
+                    .toStrict(10 seconds)
+                    .map(_.data.decodeString("UTF-8"))
+                    .map(body => println(body))
+            case x =>
+                println(x)
+        }
     }
 }

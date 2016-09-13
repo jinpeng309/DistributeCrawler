@@ -11,7 +11,8 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-    "org.jsoup" %  "jsoup" % "1.7.2",
+    "com.typesafe.play" %% "play-json" % "2.3.4",
+    "org.jsoup" % "jsoup" % "1.7.2",
     "com.typesafe.akka" %% "akka-actor" % "2.4.10",
     "com.typesafe.akka" %% "akka-cluster" % "2.4.10",
     "com.typesafe.akka" %% "akka-http-experimental" % "2.4.10",
