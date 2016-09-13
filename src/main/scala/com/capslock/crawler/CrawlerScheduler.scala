@@ -3,6 +3,7 @@ package com.capslock.crawler
 import akka.actor._
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.MemberUp
+import akka.http.scaladsl.model.{HttpMethods, HttpRequest}
 import akka.stream.Materializer
 import com.capslock.crawler.CrawlerScheduler.{HEAVY, LIGHT, Node}
 
@@ -28,8 +29,12 @@ object CrawlerScheduler {
 
 class CrawlerScheduler(topic: String, initUrl: String)(implicit materializer: Materializer) extends Actor with ActorLogging {
     val cluster = Cluster(context.system)
-    var tasks = List[Task](Task(topic, initUrl))
+    var tasks = List[Task](Task(topic, wrapHttpRequest(initUrl)))
     var nodes: List[CrawlerScheduler.Node] = List()
+
+    def wrapHttpRequest(url: String): HttpRequest = {
+        HttpRequest(HttpMethods.GET, url)
+    }
 
     override def preStart(): Unit = cluster.subscribe(self, classOf[MemberUp])
 
@@ -38,7 +43,7 @@ class CrawlerScheduler(topic: String, initUrl: String)(implicit materializer: Ma
     override def receive: Receive = {
         case TaskResult(Some(nextUrl)) =>
             log.info(s"next url $nextUrl")
-            dispatchTask(Task(topic, "https://www.zhihu.com/people/excited-vczh"))
+            dispatchTask(Task(topic, wrapHttpRequest("https://www.zhihu.com/people/excited-vczh")))
         case MasterRegistration =>
             log.info(s"MasterRegister ${sender().path}")
             context watch sender()

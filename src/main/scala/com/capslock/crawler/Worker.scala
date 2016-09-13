@@ -26,15 +26,15 @@ class Worker(master: ActorRef)(implicit materializer: ActorMaterializer) extends
         case TaskResponse(url, body, headers, taskSender) =>
             processResponse(url, body, headers)
             taskSender ! TaskResult(Some("worker finish"))
-        case Task(_, url) =>
+        case Task(_, request) =>
             val taskSender = sender()
             val requestHeaders = immutable.Seq(Worker.cookie)
-            http.singleRequest(HttpRequest(uri = url, headers = requestHeaders)).map {
+            http.singleRequest(request).map {
                 case HttpResponse(StatusCodes.OK, headers, entity, _) =>
                     entity
                         .toStrict(10 seconds)
                         .map(_.data.decodeString("UTF-8"))
-                        .map(body => TaskResponse(url, body, headers, taskSender))
+                        .map(body => TaskResponse(request._2.path.toString(), body, headers, taskSender))
                         .pipeTo(self)
                 case resp@HttpResponse(code, _, _, _) =>
                     resp.discardEntityBytes()
